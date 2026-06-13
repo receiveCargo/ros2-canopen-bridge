@@ -22,7 +22,6 @@ public:
             [this]() { poll_canopen(); });
 
         last_successful_read_ = now();
-        last_cmd_vel_time_    = now();
 
         RCLCPP_INFO(get_logger(), LOG_NODE_STARTED);
     }
@@ -37,42 +36,43 @@ private:
     }
 
     void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg) {
-        last_cmd_vel_time_ = now();
         int16_t can_vel = to_canopen_velocity(msg->linear.x);
         send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, can_vel);
         RCLCPP_INFO(get_logger(), LOG_VELOCITY_CMD, msg->linear.x, can_vel);
     }
 
-    void poll_canopen() {
-        bool cmd_stale = (now() - last_cmd_vel_time_) >
-                         rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS));
-        if (cmd_stale) {
-            send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, DEFAULT_VELOCITY);
+    void process_device_feedback() {
+        int status_raw = canopen_.readTPDO(TPDO_INDEX, SUB_STATUS);
+        int vel_raw    = canopen_.readTPDO(TPDO_INDEX, SUB_VELOCITY);
+        int error_code = canopen_.readTPDO(TPDO_INDEX, SUB_ERROR_CODE);
+
+        last_successful_read_ = now();
+
+        double       velocity = from_canopen_velocity(static_cast<int16_t>(vel_raw));
+        const char * status   = (status_raw != STATUS_OK) ? STATUS_FAULT_STR : STATUS_OK_STR;
+
+        publish_device_state(status, velocity, error_code);
+
+        if (status_raw != STATUS_OK) {
+            RCLCPP_ERROR(get_logger(), LOG_DEVICE_FAULT, error_code);
         }
+    }
 
+    void handle_comm_error(const std::exception & e) {
+        rclcpp::Duration elapsed = now() - last_successful_read_;
+        if (elapsed > rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS))) {
+            RCLCPP_ERROR(get_logger(), LOG_COMM_TIMEOUT, elapsed.seconds(), e.what());
+            publish_device_state(STATUS_TIMEOUT_STR, DEFAULT_VELOCITY, STATUS_TIMEOUT);
+        } else {
+            RCLCPP_ERROR(get_logger(), LOG_TPDO_READ_FAILED, e.what());
+        }
+    }
+
+    void poll_canopen() {
         try {
-            int status_raw  = canopen_.readTPDO(TPDO_INDEX, SUB_STATUS);
-            int vel_raw     = canopen_.readTPDO(TPDO_INDEX, SUB_VELOCITY);
-            int error_code  = canopen_.readTPDO(TPDO_INDEX, SUB_ERROR_CODE);
-
-            last_successful_read_ = now();
-
-            double velocity      = from_canopen_velocity(static_cast<int16_t>(vel_raw));
-            const char * status  = (cmd_stale || status_raw != STATUS_OK) ? STATUS_FAULT_STR : STATUS_OK_STR;
-
-            publish_device_state(status, velocity, error_code);
-
-            if (status_raw != STATUS_OK) {
-                RCLCPP_ERROR(get_logger(), LOG_DEVICE_FAULT, error_code);
-            }
+            process_device_feedback();
         } catch (const std::exception & e) {
-            rclcpp::Duration elapsed = now() - last_successful_read_;
-            if (elapsed > rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS))) {
-                RCLCPP_ERROR(get_logger(), LOG_COMM_TIMEOUT, elapsed.seconds(), e.what());
-                publish_device_state(STATUS_TIMEOUT_STR, DEFAULT_VELOCITY, STATUS_TIMEOUT);
-            } else {
-                RCLCPP_ERROR(get_logger(), LOG_TPDO_READ_FAILED, e.what());
-            }
+            handle_comm_error(e);
         }
     }
 
@@ -92,7 +92,6 @@ private:
     rclcpp::Publisher<std_msgs::msg::String>::SharedPtr device_state_pub_;
     rclcpp::TimerBase::SharedPtr poll_timer_;
     rclcpp::Time last_successful_read_;
-    rclcpp::Time last_cmd_vel_time_;
 };
 
 int main(int argc, char ** argv) {
