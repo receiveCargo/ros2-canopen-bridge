@@ -1,0 +1,107 @@
+#include <sstream>
+
+#include <rclcpp/rclcpp.hpp>
+#include <geometry_msgs/msg/twist.hpp>
+#include <std_msgs/msg/string.hpp>
+
+#include "canopen_interface.hpp"
+#include "conversion_utils.hpp"
+#include "constants.hpp"
+
+class CanopenBridgeNode : public rclcpp::Node {
+public:
+    CanopenBridgeNode() : Node("canopen_bridge_node") {
+        cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
+            "/cmd_velocity", DEFAULT_QUALITY_OF_SERVICE,
+            std::bind(&CanopenBridgeNode::cmd_vel_callback, this, std::placeholders::_1));
+
+        device_state_pub_ = create_publisher<std_msgs::msg::String>("/device_state", DEFAULT_QUALITY_OF_SERVICE);
+
+        poll_timer_ = create_wall_timer(std::chrono::milliseconds(TIMER_RATE_MS), std::bind(&CanopenBridgeNode::poll_canopen, this));
+
+        last_successful_read_ = now();
+        last_cmd_vel_time_    = now();
+        cmd_stale_            = false;
+
+        RCLCPP_INFO(get_logger(), "CANopen bridge node started");
+    }
+
+private:
+    void send_rpdo(uint16_t index, uint8_t subindex, int value) {
+        try {
+            canopen_.sendRPDO(index, subindex, value);
+        } catch (const std::exception & e) {
+            RCLCPP_ERROR(get_logger(), "RPDO send failed: %s", e.what());
+        }
+    }
+
+    void cmd_vel_callback(const geometry_msgs::msg::Twist::SharedPtr msg) {
+        last_cmd_vel_time_ = now();
+        int16_t can_vel = to_canopen_velocity(msg->linear.x);
+        send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, can_vel);
+        RCLCPP_INFO(get_logger(), "Velocity command: %.3f m/s -> %d (CANopen)",
+                    msg->linear.x, can_vel);
+    }
+
+    void poll_canopen() {
+        cmd_stale_ = (now() - last_cmd_vel_time_) >
+                     rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS));
+        if (cmd_stale_) {
+            send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, DEFAULT_VELOCITY);
+        }
+
+        try {
+            // Demonstrate invalid CAN response
+            // canopen_.readTPDO(0x4000, 0x04);
+            int status_raw  = canopen_.readTPDO(TPDO_INDEX, SUB_STATUS);
+            int vel_raw     = canopen_.readTPDO(TPDO_INDEX, SUB_VELOCITY);
+            int error_code  = canopen_.readTPDO(TPDO_INDEX, SUB_ERROR_CODE);
+
+            last_successful_read_ = now();
+
+            double velocity     = from_canopen_velocity(static_cast<int16_t>(vel_raw));
+            const char * status = (cmd_stale_ || status_raw != STATUS_OK) ? STATUS_FAULT_STR : STATUS_OK_STR;
+
+            publish_device_state(status, velocity, error_code);
+
+            if (status_raw != STATUS_OK) {
+                RCLCPP_ERROR(get_logger(), "Device fault — error_code=%d", error_code);
+            }
+        } catch (const std::exception & e) {
+            rclcpp::Duration elapsed = now() - last_successful_read_;
+            if (elapsed > rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS))) {
+                RCLCPP_ERROR(get_logger(), "CANopen communication timeout (%.1fs): %s",
+                             elapsed.seconds(), e.what());
+                publish_device_state(STATUS_TIMEOUT_STR, DEFAULT_VELOCITY, STATUS_TIMEOUT);
+            } else {
+                RCLCPP_ERROR(get_logger(), "TPDO read failed: %s", e.what());
+            }
+        }
+    }
+
+    void publish_device_state(const std::string & status, double velocity, int error_code) {
+        std::ostringstream ss;
+        ss << "{\"status\": \"" << status << "\", "
+           << "\"velocity\": " << velocity << ", "
+           << "\"error_code\": " << error_code << "}";
+
+        std_msgs::msg::String out;
+        out.data = ss.str();
+        device_state_pub_->publish(out);
+    }
+
+    CanopenInterface canopen_;
+    rclcpp::Subscription<geometry_msgs::msg::Twist>::SharedPtr cmd_vel_sub_;
+    rclcpp::Publisher<std_msgs::msg::String>::SharedPtr device_state_pub_;
+    rclcpp::TimerBase::SharedPtr poll_timer_;
+    rclcpp::Time last_successful_read_;
+    rclcpp::Time last_cmd_vel_time_;
+    bool cmd_stale_;
+};
+
+int main(int argc, char ** argv) {
+    rclcpp::init(argc, argv);
+    rclcpp::spin(std::make_shared<CanopenBridgeNode>());
+    rclcpp::shutdown();
+    return 0;
+}
