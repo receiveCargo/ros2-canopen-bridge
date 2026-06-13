@@ -23,7 +23,7 @@ public:
         last_cmd_vel_time_    = now();
         cmd_stale_            = false;
 
-        RCLCPP_INFO(get_logger(), "CANopen bridge node started");
+        RCLCPP_INFO(get_logger(), LOG_NODE_STARTED);
     }
 
 private:
@@ -31,7 +31,7 @@ private:
         try {
             canopen_.sendRPDO(index, subindex, value);
         } catch (const std::exception & e) {
-            RCLCPP_ERROR(get_logger(), "RPDO send failed: %s", e.what());
+            RCLCPP_ERROR(get_logger(), LOG_RPDO_SEND_FAILED, e.what());
         }
     }
 
@@ -39,8 +39,7 @@ private:
         last_cmd_vel_time_ = now();
         int16_t can_vel = to_canopen_velocity(msg->linear.x);
         send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, can_vel);
-        RCLCPP_INFO(get_logger(), "Velocity command: %.3f m/s -> %d (CANopen)",
-                    msg->linear.x, can_vel);
+        RCLCPP_INFO(get_logger(), LOG_VELOCITY_CMD, msg->linear.x, can_vel);
     }
 
     void poll_canopen() {
@@ -65,16 +64,15 @@ private:
             publish_device_state(status, velocity, error_code);
 
             if (status_raw != STATUS_OK) {
-                RCLCPP_ERROR(get_logger(), "Device fault — error_code=%d", error_code);
+                RCLCPP_ERROR(get_logger(), LOG_DEVICE_FAULT, error_code);
             }
         } catch (const std::exception & e) {
             rclcpp::Duration elapsed = now() - last_successful_read_;
             if (elapsed > rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS))) {
-                RCLCPP_ERROR(get_logger(), "CANopen communication timeout (%.1fs): %s",
-                             elapsed.seconds(), e.what());
+                RCLCPP_ERROR(get_logger(), LOG_COMM_TIMEOUT, elapsed.seconds(), e.what());
                 publish_device_state(STATUS_TIMEOUT_STR, DEFAULT_VELOCITY, STATUS_TIMEOUT);
             } else {
-                RCLCPP_ERROR(get_logger(), "TPDO read failed: %s", e.what());
+                RCLCPP_ERROR(get_logger(), LOG_TPDO_READ_FAILED, e.what());
             }
         }
     }

@@ -23,3 +23,11 @@
 
 #define COMM_TIMEOUT_MS    1000
 #define TIMER_RATE_MS       100
+
+// Log message strings
+#define LOG_NODE_STARTED     "CANopen bridge node started"
+#define LOG_RPDO_SEND_FAILED "RPDO send failed: %s"
+#define LOG_VELOCITY_CMD     "Velocity command: %.3f m/s -> %d (CANopen)"
+#define LOG_DEVICE_FAULT     "Device fault — error_code=%d"
+#define LOG_COMM_TIMEOUT     "CANopen communication timeout (%.1fs): %s"
+#define LOG_TPDO_READ_FAILED "TPDO read failed: %s"
