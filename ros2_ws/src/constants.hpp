@@ -26,6 +26,9 @@ inline constexpr int QOS_DEPTH       = 10;
 inline constexpr int COMM_TIMEOUT_MS = 1000;
 inline constexpr int TIMER_RATE_MS   = 100;
 
+inline constexpr const char * DEVICE_STATE_FMT =
+    "{\"status\": \"%s\", \"velocity\": %.3f, \"error_code\": %d}";
+
 // Log message strings
 inline constexpr const char * LOG_NODE_STARTED     = "CANopen bridge node started";
 inline constexpr const char * LOG_RPDO_SEND_FAILED = "RPDO send failed: %s";

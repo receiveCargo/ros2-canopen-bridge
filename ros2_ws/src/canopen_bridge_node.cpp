@@ -1,4 +1,4 @@
-#include <sstream>
+#include <cstdio>
 
 #include <rclcpp/rclcpp.hpp>
 #include <geometry_msgs/msg/twist.hpp>
@@ -77,13 +77,11 @@ private:
     }
 
     void publish_device_state(const char * status, double velocity, int error_code) {
-        std::ostringstream ss;
-        ss << "{\"status\": \"" << status << "\", "
-           << "\"velocity\": " << velocity << ", "
-           << "\"error_code\": " << error_code << "}";
+        char buf[64];
+        std::snprintf(buf, sizeof(buf), DEVICE_STATE_FMT, status, velocity, error_code);
 
         std_msgs::msg::String out;
-        out.data = ss.str();
+        out.data = buf;
         device_state_pub_->publish(out);
     }
 
