@@ -12,16 +12,17 @@ class CanopenBridgeNode : public rclcpp::Node {
 public:
     CanopenBridgeNode() : Node("canopen_bridge_node") {
         cmd_vel_sub_ = create_subscription<geometry_msgs::msg::Twist>(
-            "/cmd_velocity", DEFAULT_QUALITY_OF_SERVICE,
-            std::bind(&CanopenBridgeNode::cmd_vel_callback, this, std::placeholders::_1));
+            "/cmd_velocity", QOS_DEPTH,
+            [this](const geometry_msgs::msg::Twist::SharedPtr msg) { cmd_vel_callback(msg); });
 
-        device_state_pub_ = create_publisher<std_msgs::msg::String>("/device_state", DEFAULT_QUALITY_OF_SERVICE);
+        device_state_pub_ = create_publisher<std_msgs::msg::String>("/device_state", QOS_DEPTH);
 
-        poll_timer_ = create_wall_timer(std::chrono::milliseconds(TIMER_RATE_MS), std::bind(&CanopenBridgeNode::poll_canopen, this));
+        poll_timer_ = create_wall_timer(
+            std::chrono::milliseconds(TIMER_RATE_MS),
+            [this]() { poll_canopen(); });
 
         last_successful_read_ = now();
         last_cmd_vel_time_    = now();
-        cmd_stale_            = false;
 
         RCLCPP_INFO(get_logger(), LOG_NODE_STARTED);
     }
@@ -43,23 +44,21 @@ private:
     }
 
     void poll_canopen() {
-        cmd_stale_ = (now() - last_cmd_vel_time_) >
-                     rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS));
-        if (cmd_stale_) {
+        bool cmd_stale = (now() - last_cmd_vel_time_) >
+                         rclcpp::Duration(std::chrono::milliseconds(COMM_TIMEOUT_MS));
+        if (cmd_stale) {
             send_rpdo(VELOCITY_INDEX, VELOCITY_SUBINDEX, DEFAULT_VELOCITY);
         }
 
         try {
-            // Demonstrate invalid CAN response
-            // canopen_.readTPDO(0x4000, 0x04);
             int status_raw  = canopen_.readTPDO(TPDO_INDEX, SUB_STATUS);
             int vel_raw     = canopen_.readTPDO(TPDO_INDEX, SUB_VELOCITY);
             int error_code  = canopen_.readTPDO(TPDO_INDEX, SUB_ERROR_CODE);
 
             last_successful_read_ = now();
 
-            double velocity     = from_canopen_velocity(static_cast<int16_t>(vel_raw));
-            const char * status = (cmd_stale_ || status_raw != STATUS_OK) ? STATUS_FAULT_STR : STATUS_OK_STR;
+            double velocity      = from_canopen_velocity(static_cast<int16_t>(vel_raw));
+            const char * status  = (cmd_stale || status_raw != STATUS_OK) ? STATUS_FAULT_STR : STATUS_OK_STR;
 
             publish_device_state(status, velocity, error_code);
 
@@ -77,7 +76,7 @@ private:
         }
     }
 
-    void publish_device_state(const std::string & status, double velocity, int error_code) {
+    void publish_device_state(const char * status, double velocity, int error_code) {
         std::ostringstream ss;
         ss << "{\"status\": \"" << status << "\", "
            << "\"velocity\": " << velocity << ", "
@@ -94,7 +93,6 @@ private:
     rclcpp::TimerBase::SharedPtr poll_timer_;
     rclcpp::Time last_successful_read_;
     rclcpp::Time last_cmd_vel_time_;
-    bool cmd_stale_;
 };
 
 int main(int argc, char ** argv) {

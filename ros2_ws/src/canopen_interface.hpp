@@ -13,7 +13,7 @@ public:
 
     // Read a Transmit PDO (device → host): returns value from object dictionary entry
     // Throws std::runtime_error if the entry has never been written
-    int readTPDO(uint16_t index, uint8_t subindex);
+    int readTPDO(uint16_t index, uint8_t subindex) const;
 
 private:
     // Flat object dictionary keyed by (index, subindex)

@@ -1,33 +1,35 @@
-#define DEFAULT_VELOCITY   0
-#define DEFAULT_ERROR_CODE 0
+#pragma once
 
-#define VELOCITY_INDEX    0x2000
-#define VELOCITY_SUBINDEX 0x00
+#include <cstdint>
+
+inline constexpr int DEFAULT_VELOCITY   = 0;
+inline constexpr int DEFAULT_ERROR_CODE = 0;
+
+inline constexpr uint16_t VELOCITY_INDEX    = 0x2000;
+inline constexpr uint8_t  VELOCITY_SUBINDEX = 0x00;
 
 // Mock object dictionary subindices for the device TPDO at 0x3000
-#define TPDO_INDEX     0x3000
-#define SUB_STATUS     0x01
-#define SUB_VELOCITY   0x02
-#define SUB_ERROR_CODE 0x03
+inline constexpr uint16_t TPDO_INDEX     = 0x3000;
+inline constexpr uint8_t  SUB_STATUS     = 0x01;
+inline constexpr uint8_t  SUB_VELOCITY   = 0x02;
+inline constexpr uint8_t  SUB_ERROR_CODE = 0x03;
 
 // Device status codes
-#define STATUS_OK    1
-#define STATUS_FAULT 0
-#define STATUS_TIMEOUT -1
+inline constexpr int STATUS_OK      =  1;
+inline constexpr int STATUS_TIMEOUT = -1;
 
-#define STATUS_OK_STR "OK"
-#define STATUS_FAULT_STR "FAULT"
-#define STATUS_TIMEOUT_STR "TIMEOUT"
+inline constexpr const char * STATUS_OK_STR      = "OK";
+inline constexpr const char * STATUS_FAULT_STR   = "FAULT";
+inline constexpr const char * STATUS_TIMEOUT_STR = "TIMEOUT";
 
-#define DEFAULT_QUALITY_OF_SERVICE 10
-
-#define COMM_TIMEOUT_MS    1000
-#define TIMER_RATE_MS       100
+inline constexpr int QOS_DEPTH       = 10;
+inline constexpr int COMM_TIMEOUT_MS = 1000;
+inline constexpr int TIMER_RATE_MS   = 100;
 
 // Log message strings
-#define LOG_NODE_STARTED     "CANopen bridge node started"
-#define LOG_RPDO_SEND_FAILED "RPDO send failed: %s"
-#define LOG_VELOCITY_CMD     "Velocity command: %.3f m/s -> %d (CANopen)"
-#define LOG_DEVICE_FAULT     "Device fault — error_code=%d"
-#define LOG_COMM_TIMEOUT     "CANopen communication timeout (%.1fs): %s"
-#define LOG_TPDO_READ_FAILED "TPDO read failed: %s"
+inline constexpr const char * LOG_NODE_STARTED     = "CANopen bridge node started";
+inline constexpr const char * LOG_RPDO_SEND_FAILED = "RPDO send failed: %s";
+inline constexpr const char * LOG_VELOCITY_CMD     = "Velocity command: %.3f m/s -> %d (CANopen)";
+inline constexpr const char * LOG_DEVICE_FAULT     = "Device fault - error_code=%d";
+inline constexpr const char * LOG_COMM_TIMEOUT     = "CANopen communication timeout (%.1fs): %s";
+inline constexpr const char * LOG_TPDO_READ_FAILED = "TPDO read failed: %s";

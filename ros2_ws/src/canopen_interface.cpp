@@ -22,8 +22,8 @@ void CanopenInterface::sendRPDO(uint16_t index, uint8_t subindex, int value) {
     }
 }
 
-int CanopenInterface::readTPDO(uint16_t index, uint8_t subindex) {
-    std::map<std::pair<uint16_t, uint8_t>, int>::iterator it = object_dict_.find({index, subindex});
+int CanopenInterface::readTPDO(uint16_t index, uint8_t subindex) const {
+    auto it = object_dict_.find({index, subindex});
     if (it == object_dict_.end()) {
         throw std::runtime_error("CANopen: no data at requested entry");
     }
